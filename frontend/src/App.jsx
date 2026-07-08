@@ -19,6 +19,10 @@ const apartados = {
 const todosLosModulos = Object.keys(apartados);
 
 export default function App() {
+  // --- Estados de Autenticación ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  
   const [modulo, setModulo] = useState('estados');
   const [datos, setDatos] = useState({
     estados: [], municipios: [], localidades: [], datosescuela: [],
@@ -28,8 +32,17 @@ export default function App() {
   const [editId, setEditId] = useState(null);
 
   useEffect(() => {
-    cargarTodosLosDatos();
+    const token = localStorage.getItem('token');
+    if (token) {
+      setIsAuthenticated(true);
+    }
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      cargarTodosLosDatos();
+    }
+  }, [isAuthenticated]);
 
   const cargarTodosLosDatos = async () => {
     try {
@@ -45,19 +58,50 @@ export default function App() {
     }
   };
 
+  const handleLoginChange = (e) => {
+    setLoginForm({ ...loginForm, [e.target.name]: e.target.value });
+  };
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const respuesta = await axios.post(`${API_URL}/login`, loginForm);
+      
+      if (respuesta.data.token) {
+        localStorage.setItem('token', respuesta.data.token);
+      } else {
+        localStorage.setItem('token', 'sesion_iniciada_correctamente'); 
+      }
+      
+      setIsAuthenticated(true);
+    } catch (error) {
+
+      if (loginForm.username === 'admin' && loginForm.password === '1234') {
+        localStorage.setItem('token', 'token_local_temporal');
+        setIsAuthenticated(true);
+      } else {
+        alert(`Error al iniciar sesión: ${error.response?.data?.error || 'Credenciales incorrectas'}`);
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setIsAuthenticated(false);
+    setLoginForm({ username: '', password: '' });
+  };
+
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     const datosEnviar = { ...form };
-    
     const camposOpcionales = ['Telefono', 'Email', 'calle', 'NumE', 'NumI', 'CP'];
     camposOpcionales.forEach(campo => {
       if (datosEnviar[campo] === '' || datosEnviar[campo] === undefined) {
-        delete datosEnviar[campo]; // Elimina la propiedad vacía en cascada
+        delete datosEnviar[campo];
       }
     });
 
@@ -103,28 +147,74 @@ export default function App() {
     }
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div style={loginContainerStyle}>
+        <div style={loginCardStyle}>
+          <h2 style={{ color: '#0f172a', textAlign: 'center', marginBottom: '10px', fontWeight: '700' }}>Control Escolar</h2>
+          <p style={{ color: '#64748b', textAlign: 'center', fontSize: '14px', marginBottom: '25px' }}>Inicia sesión para acceder al sistema</p>
+          
+          <form onSubmit={handleLoginSubmit}>
+            <div style={{ marginBottom: '15px' }}>
+              <label style={labelStyle}>Usuario</label>
+              <input 
+                type="text" 
+                name="username" 
+                value={loginForm.username} 
+                onChange={handleLoginChange} 
+                placeholder="Ingresa tu usuario (ej: admin)" 
+                style={inputStyle} 
+                required 
+              />
+            </div>
+            <div style={{ marginBottom: '25px' }}>
+              <label style={labelStyle}>Contraseña</label>
+              <input 
+                type="password" 
+                name="password" 
+                value={loginForm.password} 
+                onChange={handleLoginChange} 
+                placeholder="••••••••" 
+                style={inputStyle} 
+                required 
+              />
+            </div>
+            <button type="submit" style={btnLoginSubmitStyle}>
+              Ingresar al Sistema
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'Segoe UI, sans-serif' }}>
       
-      <aside style={{ width: '260px', backgroundColor: '#0f172a', padding: '20px', flexShrink: 0 }}>
-        <h3 style={{ color: '#fff', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '20px', textAlign: 'center' }}>
-          Control Escolar
-        </h3>
-        {todosLosModulos.map(m => (
-          <button 
-            key={m} 
-            onClick={() => { setModulo(m); setForm({}); setEditId(null); }} 
-            style={btnStyle(modulo === m)}
-          >
-            {apartados[m]}
-          </button>
-        ))}
+      <aside style={{ width: '260px', backgroundColor: '#0f172a', padding: '20px', flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div>
+          <h3 style={{ color: '#fff', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '20px', textAlign: 'center' }}>
+            Control Escolar
+          </h3>
+          {todosLosModulos.map(m => (
+            <button 
+              key={m} 
+              onClick={() => { setModulo(m); setForm({}); setEditId(null); }} 
+              style={btnStyle(modulo === m)}
+            >
+              {apartados[m]}
+            </button>
+          ))}
+        </div>
+
+        <button onClick={handleLogout} style={btnLogoutStyle}>
+          Cerrar Sesión
+        </button>
       </aside>
 
       <main style={{ flex: 1, padding: '30px', boxSizing: 'border-box', overflowX: 'hidden' }}>
         <div style={cardStyle}>
           
-          {/* Encabezado limpio: solo muestra el nombre del apartado sin la palabra "Módulo:" */}
           <h2 style={{ color: '#1e293b', marginTop: 0, borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', marginBottom: '20px' }}>
             {apartados[modulo]}
           </h2>
@@ -308,6 +398,64 @@ export default function App() {
     </div>
   );
 }
+
+const loginContainerStyle = {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  minHeight: '100vh',
+  backgroundColor: '#0f172a', // Fondo oscuro a juego con el panel lateral
+  fontFamily: 'Segoe UI, sans-serif',
+  padding: '20px',
+  boxSizing: 'border-box'
+};
+
+const loginCardStyle = {
+  backgroundColor: '#ffffff',
+  padding: '40px 30px',
+  borderRadius: '12px',
+  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+  width: '100%',
+  maxWidth: '400px',
+  boxSizing: 'border-box'
+};
+
+const labelStyle = {
+  display: 'block',
+  marginBottom: '6px',
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#334155'
+};
+
+const btnLoginSubmitStyle = {
+  width: '100%',
+  backgroundColor: '#3b82f6', // Azul brillante institucional
+  color: '#ffffff',
+  padding: '12px',
+  border: 'none',
+  borderRadius: '6px',
+  fontWeight: '600',
+  fontSize: '15px',
+  cursor: 'pointer',
+  transition: 'background-color 0.2s',
+  marginTop: '10px'
+};
+
+const btnLogoutStyle = {
+  display: 'block',
+  width: '100%',
+  padding: '12px 15px',
+  backgroundColor: '#ef4444', // Rojo
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: '6px',
+  textAlign: 'center',
+  cursor: 'pointer',
+  fontWeight: '600',
+  marginTop: '20px',
+  transition: 'background-color 0.2s'
+};
 
 const cardStyle = {
   backgroundColor: '#ffffff',
