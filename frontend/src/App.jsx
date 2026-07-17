@@ -3,13 +3,8 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api';
 
-// ==========================================
-// 🌟 CONFIGURACIÓN CLAVE PARA HTTPONLY COOKIES
-// ==========================================
-// Esto le dice a Axios que envíe y reciba cookies automáticamente en cada petición
 axios.defaults.withCredentials = true;
 
-// Interceptor para detectar si la sesión expira (Error 401 o 403)
 axios.interceptors.response.use(
   (response) => response,
   (error) => {

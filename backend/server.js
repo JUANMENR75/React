@@ -1,16 +1,13 @@
-require('dotenv').config(); // 1. Cargar variables de entorno al inicio
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const cookieParser = require('cookie-parser'); // 2. Importar cookie-parser
+const cookieParser = require('cookie-parser');
 
 const app = express();
 
-// ==========================================
-// ⚙️ CONFIGURACIÓN DE MIDDLEWARES GLOBALES
-// ==========================================
-
+// CONFIGURACIÓN DE MIDDLEWARES GLOBALES
 // Configuración de CORS estricta (obligatoria para el intercambio de cookies)
 app.use(cors({
   origin: 'http://localhost:5173', // El origen exacto de tu frontend de React (Vite)
@@ -18,11 +15,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.use(cookieParser()); // Habilitar la lectura de cookies en el backend
+app.use(cookieParser());
 
-// ==========================================
-// 🗄️ CONEXIÓN A LA BASE DE DATOS
-// ==========================================
+// CONEXIÓN A LA BASE DE DATOS
 const db = mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',        
@@ -38,9 +33,6 @@ db.connect((err) => {
   console.log('Conectado exitosamente a la base de datos MySQL.');
 });
 
-// ==========================================
-// 🔐 ENDPOINT DE LOGIN (PÚBLICO)
-// ==========================================
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body; 
 
@@ -85,18 +77,13 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-// ==========================================
-// 🚪 ENDPOINT DE LOGOUT (PÚBLICO)
-// ==========================================
 app.post('/api/logout', (req, res) => {
   // Destruir la cookie del token en el navegador del cliente
   res.clearCookie('token');
   res.json({ message: 'Sesión cerrada de manera segura' });
 });
 
-// ==========================================
-// 🛡️ MIDDLEWARE DE VERIFICACIÓN DE JWT
-// ==========================================
+// MIDDLEWARE DE VERIFICACIÓN DE JWT
 const verificarToken = (req, res, next) => {
   // Leer el token directamente de las cookies enviadas por el navegador
   const token = req.cookies.token;
@@ -110,17 +97,13 @@ const verificarToken = (req, res, next) => {
       return res.status(403).json({ error: 'Sesión expirada o inválida.' });
     }
     
-    req.usuario = decoded; // Adjuntar datos del usuario desencriptado a la petición
-    next(); // Continuar a la ruta solicitada
+    req.usuario = decoded; // Guardar los datos del usuario decodificados en la solicitud
+    next();
   });
 };
 
-// ⚠️ A partir de aquí, todas las rutas declaradas requerirán estar autenticados
 app.use(verificarToken);
 
-// ==========================================
-// 🗺️ CRUD - ESTADOS (PROTEGIDO 🔒)
-// ==========================================
 app.get('/api/estados', (req, res) => {
     db.query('SELECT * FROM cestados', (err, r) => {
         if (err) return res.status(500).json({ error: err });
@@ -146,9 +129,6 @@ app.delete('/api/estados/:id', (req, res) => {
     });
 });
 
-// ==========================================
-// 🏙️ CRUD - MUNICIPIOS (PROTEGIDO 🔒)
-// ==========================================
 app.get('/api/municipios', (req, res) => { 
     db.query('SELECT * FROM cmunicipio', (err, r) => {
         if (err) return res.status(500).json({ error: err });
@@ -174,9 +154,6 @@ app.delete('/api/municipios/:id', (req, res) => {
     });
 });
 
-// ==========================================
-// 📍 CRUD - LOCALIDADES (PROTEGIDO 🔒)
-// ==========================================
 app.get('/api/localidades', (req, res) => { 
     db.query('SELECT * FROM clocalidad', (err, r) => {
         if (err) return res.status(500).json({ error: err });
@@ -202,9 +179,6 @@ app.delete('/api/localidades/:id', (req, res) => {
     });
 });
 
-// ==========================================
-// 🎓 CRUD - CARRERAS (PROTEGIDO 🔒)
-// ==========================================
 app.get('/api/carreras', (req, res) => { 
     db.query('SELECT * FROM ccarreras', (err, r) => {
         if (err) return res.status(500).json({ error: err });
@@ -230,9 +204,6 @@ app.delete('/api/carreras/:id', (req, res) => {
     });
 });
 
-// ==========================================
-// 🧬 CRUD - GENEROS (PROTEGIDO 🔒)
-// ==========================================
 app.get('/api/generos', (req, res) => { 
     db.query('SELECT * FROM genero', (err, r) => {
         if (err) return res.status(500).json({ error: err });
@@ -258,9 +229,6 @@ app.delete('/api/generos/:id', (req, res) => {
     });
 });
 
-// ==========================================
-// 🏫 CRUD - DATOS ESCUELA (PROTEGIDO 🔒)
-// ==========================================
 app.get('/api/datosescuela', (req, res) => { 
     db.query('SELECT * FROM cdatosescuela', (err, r) => {
         if (err) return res.status(500).json({ error: err });
@@ -286,9 +254,6 @@ app.delete('/api/datosescuela/:id', (req, res) => {
     });
 });
 
-// ==========================================
-// 📝 CRUD - ALUMNOS (PROTEGIDO 🔒)
-// ==========================================
 app.get('/api/alumnos', (req, res) => { 
     db.query('SELECT * FROM calumnos', (err, r) => {
         if (err) return res.status(500).json({ error: err });
@@ -314,9 +279,6 @@ app.delete('/api/alumnos/:id', (req, res) => {
     });
 });
 
-// ==========================================
-// 🔄 RESPUESTAS SIMULADAS ADICIONALES (PROTEGIDO 🔒)
-// ==========================================
 const rutasExtra = ['ciclosescolares', 'grados', 'grupos', 'turnos', 'datospersonales', 'tipospersonal', 'personal'];
 rutasExtra.forEach(modulo => {
   app.get(`/api/${modulo}`, (req, res) => res.json([]));
@@ -325,9 +287,6 @@ rutasExtra.forEach(modulo => {
   app.delete(`/api/${modulo}/:id`, (req, res) => res.json({ message: 'Eliminación simulada' }));
 });
 
-// ==========================================
-// 🚀 INICIALIZACIÓN DEL SERVIDOR
-// ==========================================
 const PUERTO = process.env.PORT || 5000;
 app.listen(PUERTO, () => {
   console.log(`Servidor corriendo en http://localhost:${PUERTO}`);
