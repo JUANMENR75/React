@@ -420,9 +420,6 @@ export default function App() {
   );
 }
 
-// ==========================================
-// 🎨 ESTILOS (Siguen exactamente igual)
-// ==========================================
 const loginContainerStyle = {
   display: 'flex',
   justifyContent: 'center',

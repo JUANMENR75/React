@@ -1,23 +1,20 @@
-require('dotenv').config();
+require('dotenv').config(); 
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const cookieParser = require('cookie-parser');
+const cookieParser = require('cookie-parser'); 
 
 const app = express();
 
-// CONFIGURACIÓN DE MIDDLEWARES GLOBALES
-// Configuración de CORS estricta (obligatoria para el intercambio de cookies)
 app.use(cors({
-  origin: 'http://localhost:5173', // El origen exacto de tu frontend de React (Vite)
-  credentials: true                // Permite al navegador recibir y enviar cookies
+  origin: 'http://localhost:5173', 
+  credentials: true              
 }));
 
 app.use(express.json());
 app.use(cookieParser());
 
-// CONEXIÓN A LA BASE DE DATOS
 const db = mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',        
@@ -33,6 +30,7 @@ db.connect((err) => {
   console.log('Conectado exitosamente a la base de datos MySQL.');
 });
 
+
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body; 
 
@@ -47,22 +45,19 @@ app.post('/api/login', (req, res) => {
     if (results.length > 0) {
       const usuario = results[0];
 
-      // Generar el JWT real con los datos no sensibles
       const token = jwt.sign(
         { id: usuario.id, correo: usuario.correo, id_rol: usuario.id_rol },
         process.env.JWT_SECRET || 'clave_secreta_por_defecto',
-        { expiresIn: '3h' } // Expira en 3 horas
+        { expiresIn: '3h' }
       );
 
-      // Enviar el token dentro de una cookie segura HttpOnly
       res.cookie('token', token, {
-        httpOnly: true,                    // Bloquea el acceso a la cookie desde JavaScript en el cliente (Evita XSS)
-        secure: false,                     // En producción (HTTPS) debe ser 'true', en local (http) se deja en 'false'
-        sameSite: 'lax',                   // Protección básica contra ataques CSRF
-        maxAge: 3 * 60 * 60 * 1000         // Duración de la cookie (3 horas)
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 3 * 60 * 60 * 1000 // 3 horas de vigencia
       });
 
-      // Retornamos la respuesta sin exponer el token en el JSON visible
       res.json({
         usuario: {
           id: usuario.id,
@@ -78,14 +73,11 @@ app.post('/api/login', (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  // Destruir la cookie del token en el navegador del cliente
   res.clearCookie('token');
   res.json({ message: 'Sesión cerrada de manera segura' });
 });
 
-// MIDDLEWARE DE VERIFICACIÓN DE JWT
 const verificarToken = (req, res, next) => {
-  // Leer el token directamente de las cookies enviadas por el navegador
   const token = req.cookies.token;
 
   if (!token) {
@@ -96,9 +88,8 @@ const verificarToken = (req, res, next) => {
     if (err) {
       return res.status(403).json({ error: 'Sesión expirada o inválida.' });
     }
-    
-    req.usuario = decoded; // Guardar los datos del usuario decodificados en la solicitud
-    next();
+    req.usuario = decoded; 
+    next(); 
   });
 };
 
@@ -186,12 +177,20 @@ app.get('/api/carreras', (req, res) => {
     }); 
 });
 app.post('/api/carreras', (req, res) => { 
+    if (req.body.Nombre && !req.body.NombreCarreras) {
+        req.body.NombreCarreras = req.body.Nombre;
+        delete req.body.Nombre;
+    }
     db.query('INSERT INTO ccarreras SET ?', req.body, (err, r) => {
         if (err) return res.status(500).json({ error: err });
         res.json(r);
     }); 
 });
 app.put('/api/carreras/:id', (req, res) => {
+    if (req.body.Nombre && !req.body.NombreCarreras) {
+        req.body.NombreCarreras = req.body.Nombre;
+        delete req.body.Nombre;
+    }
     db.query('UPDATE ccarreras SET ? WHERE idCarrera = ?', [req.body, req.params.id], (err, r) => {
         if (err) return res.status(500).json({ error: err });
         res.json(r);
@@ -236,12 +235,20 @@ app.get('/api/datosescuela', (req, res) => {
     }); 
 });
 app.post('/api/datosescuela', (req, res) => { 
+    if (req.body.calle) {
+        req.body.Calle = req.body.calle;
+        delete req.body.calle;
+    }
     db.query('INSERT INTO cdatosescuela SET ?', req.body, (err, r) => {
         if (err) return res.status(500).json({ error: err });
         res.json(r);
     }); 
 });
 app.put('/api/datosescuela/:id', (req, res) => {
+    if (req.body.calle) {
+        req.body.Calle = req.body.calle;
+        delete req.body.calle;
+    }
     db.query('UPDATE cdatosescuela SET ? WHERE CCT = ?', [req.body, req.params.id], (err, r) => {
         if (err) return res.status(500).json({ error: err });
         res.json(r);
@@ -255,32 +262,135 @@ app.delete('/api/datosescuela/:id', (req, res) => {
 });
 
 app.get('/api/alumnos', (req, res) => { 
-    db.query('SELECT * FROM calumnos', (err, r) => {
+    const query = `
+        SELECT a.Matricula, a.idCarrera, a.idDatosP, a.Status, a.CCT, a.idCiclo, a.idGrado, a.idGrupo, a.idTurno, dp.Nombre
+        FROM calumnos a
+        INNER JOIN cdatospersonales dp ON a.idDatosP = dp.idDatosP
+    `;
+    db.query(query, (err, r) => {
         if (err) return res.status(500).json({ error: err });
         res.json(r);
     }); 
 });
+
 app.post('/api/alumnos', (req, res) => { 
-    db.query('INSERT INTO calumnos SET ?', req.body, (err, r) => {
-        if (err) return res.status(500).json({ error: err });
-        res.json(r);
-    }); 
-});
-app.put('/api/alumnos/:id', (req, res) => {
-    db.query('UPDATE calumnos SET ? WHERE Matricula = ?', [req.body, req.params.id], (err, r) => {
-        if (err) return res.status(500).json({ error: err });
-        res.json(r);
-    });
-});
-app.delete('/api/alumnos/:id', (req, res) => {
-    db.query('DELETE FROM calumnos WHERE Matricula = ?', [req.params.id], (err, r) => {
-        if (err) return res.status(500).json({ error: err });
-        res.json(r);
+    const { Matricula, Nombre, PApellido, SApellido, idCarrera, CCT, idCiclo, idGrado, idGrupo, idTurno } = req.body;
+    const nombreCompleto = `${Nombre || ''} ${PApellido || ''} ${SApellido || ''}`.trim();
+
+    const sqlEscuela = 'SELECT idEstado, idMunicipio, idLocalidad FROM cdatosescuela WHERE CCT = ?';
+    db.query(sqlEscuela, [CCT], (errEsc, escRes) => {
+        const idEstado = (!errEsc && escRes.length > 0) ? escRes[0].idEstado : 1;
+        const idMunicipio = (!errEsc && escRes.length > 0) ? escRes[0].idMunicipio : 1;
+        const idLocalidad = (!errEsc && escRes.length > 0) ? escRes[0].idLocalidad : 1;
+
+        const datosPersonales = {
+            Nombre: nombreCompleto,
+            Curp: Matricula || 'POR_DEFINIR',
+            idEstado, idMunicipio, idLocalidad,
+            idGenero: 1
+        };
+
+        db.query('INSERT INTO cdatospersonales SET ?', datosPersonales, (errDP, resDP) => {
+            if (errDP) return res.status(500).json({ error: errDP });
+
+            const idDatosP = resDP.insertId; // Rescatamos la PK autogenerada
+
+            const datosAlumno = {
+                Matricula, idCarrera, idDatosP, CCT, idCiclo, idGrado, idGrupo, idTurno,
+                Status: 'A'
+            };
+
+            // 2. Guardar en Alumnos mapeando la PK obtenida y las llaves relacionales
+            db.query('INSERT INTO calumnos SET ?', datosAlumno, (errA, r) => {
+                if (errA) return res.status(500).json({ error: errA });
+                res.json(r);
+            });
+        });
     });
 });
 
-const rutasExtra = ['ciclosescolares', 'grados', 'grupos', 'turnos', 'datospersonales', 'tipospersonal', 'personal'];
-rutasExtra.forEach(modulo => {
+app.put('/api/alumnos/:id', (req, res) => {
+    const matricula = req.params.id;
+    const { Nombre, PApellido, SApellido, idCarrera, CCT, idCiclo, idGrado, idGrupo, idTurno } = req.body;
+    const nombreCompleto = `${Nombre || ''} ${PApellido || ''} ${SApellido || ''}`.trim();
+
+    db.query('SELECT idDatosP FROM calumnos WHERE Matricula = ?', [matricula], (err, results) => {
+        if (err) return res.status(500).json({ error: err });
+        if (results.length === 0) return res.status(404).json({ error: 'Alumno no encontrado.' });
+
+        const idDatosP = results[0].idDatosP;
+
+        // 1. Actualizar Datos Personales unificados
+        db.query('UPDATE cdatospersonales SET Nombre = ? WHERE idDatosP = ?', [nombreCompleto, idDatosP], (errDP) => {
+            if (errDP) return res.status(500).json({ error: errDP });
+
+            const datosAlumno = { idCarrera, CCT, idCiclo, idGrado, idGrupo, idTurno };
+            
+            // 2. Actualizar perfiles escolares en la tabla Alumnos
+            db.query('UPDATE calumnos SET ? WHERE Matricula = ?', [datosAlumno, matricula], (errA, r) => {
+                if (errA) return res.status(500).json({ error: errA });
+                res.json(r);
+            });
+        });
+    });
+});
+
+app.delete('/api/alumnos/:id', (req, res) => {
+    const matricula = req.params.id;
+
+    db.query('SELECT idDatosP FROM calumnos WHERE Matricula = ?', [matricula], (err, results) => {
+        if (err) return res.status(500).json({ error: err });
+        if (results.length === 0) return res.status(404).json({ error: 'Alumno no encontrado.' });
+
+        const idDatosP = results[0].idDatosP;
+
+        // Al eliminar de cdatospersonales se activa tu regla "ON DELETE CASCADE" y limpia calumnos solo
+        db.query('DELETE FROM cdatospersonales WHERE idDatosP = ?', [idDatosP], (errDel, r) => {
+            if (errDel) return res.status(500).json({ error: errDel });
+            res.json(r);
+        });
+    });
+});
+
+const catalogosNuevos = [
+  { ruta: 'ciclosescolares', tabla: 'CCiclosEscolares', pk: 'idCiclo' },
+  { ruta: 'grados',           tabla: 'CGrados',           pk: 'idGrado' },
+  { ruta: 'grupos',           tabla: 'CGrupos',           pk: 'idGrupo' },
+  { ruta: 'turnos',           tabla: 'CTurnos',           pk: 'idTurno' }
+];
+
+catalogosNuevos.forEach(cat => {
+  app.get(`/api/${cat.ruta}`, (req, res) => {
+    db.query(`SELECT * FROM ${cat.tabla}`, (err, r) => {
+      if (err) return res.status(500).json({ error: err });
+      res.json(r);
+    });
+  });
+
+  app.post(`/api/${cat.ruta}`, (req, res) => {
+    db.query(`INSERT INTO ${cat.tabla} SET ?`, req.body, (err, r) => {
+      if (err) return res.status(500).json({ error: err });
+      res.json(r);
+    });
+  });
+
+  app.put(`/api/${cat.ruta}/:id`, (req, res) => {
+    db.query(`UPDATE ${cat.tabla} SET ? WHERE ${cat.pk} = ?`, [req.body, req.params.id], (err, r) => {
+      if (err) return res.status(500).json({ error: err });
+      res.json(r);
+    });
+  });
+
+  app.delete(`/api/${cat.ruta}/:id`, (req, res) => {
+    db.query(`DELETE FROM ${cat.tabla} WHERE ${cat.pk} = ?`, [req.params.id], (err, r) => {
+      if (err) return res.status(500).json({ error: err });
+      res.json(r);
+    });
+  });
+});
+
+const rutasSimuladasRestantes = ['datospersonales', 'tipospersonal', 'personal'];
+rutasSimuladasRestantes.forEach(modulo => {
   app.get(`/api/${modulo}`, (req, res) => res.json([]));
   app.post(`/api/${modulo}`, (req, res) => res.json({ message: 'Guardado simulado' }));
   app.put(`/api/${modulo}/:id`, (req, res) => res.json({ message: 'Actualización simulada' }));
