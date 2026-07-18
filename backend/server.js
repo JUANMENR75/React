@@ -1,17 +1,33 @@
+require('dotenv').config(); // 1. Cargar variables de entorno al inicio
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser'); // 2. Importar cookie-parser
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// Configuración de la conexión a MySQL
+// ==========================================
+// ⚙️ CONFIGURACIÓN DE MIDDLEWARES GLOBALES
+// ==========================================
+
+// Configuración de CORS estricta (obligatoria para el intercambio de cookies)
+app.use(cors({
+  origin: 'http://localhost:5173', // El origen exacto de tu frontend de React (Vite)
+  credentials: true                // Permite al navegador recibir y enviar cookies
+}));
+
+app.use(express.json());
+app.use(cookieParser()); // Habilitar la lectura de cookies en el backend
+
+// ==========================================
+// 🗄️ CONEXIÓN A LA BASE DE DATOS
+// ==========================================
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',        
-  password: '14442162', 
-  database: 'controlescolar'
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',        
+  password: process.env.DB_PASSWORD || '14442162', 
+  database: process.env.DB_DATABASE || 'controlescolar'
 });
 
 db.connect((err) => {
@@ -23,7 +39,7 @@ db.connect((err) => {
 });
 
 // ==========================================
-// 🔐 ENDPOINT DE LOGIN
+// 🔐 ENDPOINT DE LOGIN (PÚBLICO)
 // ==========================================
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body; 
@@ -38,8 +54,24 @@ app.post('/api/login', (req, res) => {
 
     if (results.length > 0) {
       const usuario = results[0];
+
+      // Generar el JWT real con los datos no sensibles
+      const token = jwt.sign(
+        { id: usuario.id, correo: usuario.correo, id_rol: usuario.id_rol },
+        process.env.JWT_SECRET || 'clave_secreta_por_defecto',
+        { expiresIn: '3h' } // Expira en 3 horas
+      );
+
+      // Enviar el token dentro de una cookie segura HttpOnly
+      res.cookie('token', token, {
+        httpOnly: true,                    // Bloquea el acceso a la cookie desde JavaScript en el cliente (Evita XSS)
+        secure: false,                     // En producción (HTTPS) debe ser 'true', en local (http) se deja en 'false'
+        sameSite: 'lax',                   // Protección básica contra ataques CSRF
+        maxAge: 3 * 60 * 60 * 1000         // Duración de la cookie (3 horas)
+      });
+
+      // Retornamos la respuesta sin exponer el token en el JSON visible
       res.json({
-        token: 'token_seguro_generado_bd',
         usuario: {
           id: usuario.id,
           nombre: usuario.nombre,
@@ -54,7 +86,40 @@ app.post('/api/login', (req, res) => {
 });
 
 // ==========================================
-// 🗺️ CRUD - ESTADOS
+// 🚪 ENDPOINT DE LOGOUT (PÚBLICO)
+// ==========================================
+app.post('/api/logout', (req, res) => {
+  // Destruir la cookie del token en el navegador del cliente
+  res.clearCookie('token');
+  res.json({ message: 'Sesión cerrada de manera segura' });
+});
+
+// ==========================================
+// 🛡️ MIDDLEWARE DE VERIFICACIÓN DE JWT
+// ==========================================
+const verificarToken = (req, res, next) => {
+  // Leer el token directamente de las cookies enviadas por el navegador
+  const token = req.cookies.token;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Acceso denegado. Sesión no iniciada.' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'clave_secreta_por_defecto', (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Sesión expirada o inválida.' });
+    }
+    
+    req.usuario = decoded; // Adjuntar datos del usuario desencriptado a la petición
+    next(); // Continuar a la ruta solicitada
+  });
+};
+
+// ⚠️ A partir de aquí, todas las rutas declaradas requerirán estar autenticados
+app.use(verificarToken);
+
+// ==========================================
+// 🗺️ CRUD - ESTADOS (PROTEGIDO 🔒)
 // ==========================================
 app.get('/api/estados', (req, res) => {
     db.query('SELECT * FROM cestados', (err, r) => {
@@ -82,7 +147,7 @@ app.delete('/api/estados/:id', (req, res) => {
 });
 
 // ==========================================
-// 🏙️ CRUD - MUNICIPIOS
+// 🏙️ CRUD - MUNICIPIOS (PROTEGIDO 🔒)
 // ==========================================
 app.get('/api/municipios', (req, res) => { 
     db.query('SELECT * FROM cmunicipio', (err, r) => {
@@ -110,7 +175,7 @@ app.delete('/api/municipios/:id', (req, res) => {
 });
 
 // ==========================================
-// 📍 CRUD - LOCALIDADES
+// 📍 CRUD - LOCALIDADES (PROTEGIDO 🔒)
 // ==========================================
 app.get('/api/localidades', (req, res) => { 
     db.query('SELECT * FROM clocalidad', (err, r) => {
@@ -138,7 +203,7 @@ app.delete('/api/localidades/:id', (req, res) => {
 });
 
 // ==========================================
-// 🎓 CRUD - CARRERAS
+// 🎓 CRUD - CARRERAS (PROTEGIDO 🔒)
 // ==========================================
 app.get('/api/carreras', (req, res) => { 
     db.query('SELECT * FROM ccarreras', (err, r) => {
@@ -166,7 +231,7 @@ app.delete('/api/carreras/:id', (req, res) => {
 });
 
 // ==========================================
-// 🧬 CRUD - GENEROS
+// 🧬 CRUD - GENEROS (PROTEGIDO 🔒)
 // ==========================================
 app.get('/api/generos', (req, res) => { 
     db.query('SELECT * FROM genero', (err, r) => {
@@ -194,7 +259,7 @@ app.delete('/api/generos/:id', (req, res) => {
 });
 
 // ==========================================
-// 🏫 CRUD - DATOS ESCUELA
+// 🏫 CRUD - DATOS ESCUELA (PROTEGIDO 🔒)
 // ==========================================
 app.get('/api/datosescuela', (req, res) => { 
     db.query('SELECT * FROM cdatosescuela', (err, r) => {
@@ -222,7 +287,7 @@ app.delete('/api/datosescuela/:id', (req, res) => {
 });
 
 // ==========================================
-// 📝 CRUD - ALUMNOS
+// 📝 CRUD - ALUMNOS (PROTEGIDO 🔒)
 // ==========================================
 app.get('/api/alumnos', (req, res) => { 
     db.query('SELECT * FROM calumnos', (err, r) => {
@@ -250,7 +315,7 @@ app.delete('/api/alumnos/:id', (req, res) => {
 });
 
 // ==========================================
-// 🔄 RESPUESTAS SIMULADAS PARA RUTAS ADICIONALES
+// 🔄 RESPUESTAS SIMULADAS ADICIONALES (PROTEGIDO 🔒)
 // ==========================================
 const rutasExtra = ['ciclosescolares', 'grados', 'grupos', 'turnos', 'datospersonales', 'tipospersonal', 'personal'];
 rutasExtra.forEach(modulo => {
@@ -263,7 +328,7 @@ rutasExtra.forEach(modulo => {
 // ==========================================
 // 🚀 INICIALIZACIÓN DEL SERVIDOR
 // ==========================================
-const PUERTO = 5000;
+const PUERTO = process.env.PORT || 5000;
 app.listen(PUERTO, () => {
   console.log(`Servidor corriendo en http://localhost:${PUERTO}`);
 });

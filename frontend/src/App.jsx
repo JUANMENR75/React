@@ -3,6 +3,25 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api';
 
+// ==========================================
+// 🌟 CONFIGURACIÓN CLAVE PARA HTTPONLY COOKIES
+// ==========================================
+// Esto le dice a Axios que envíe y reciba cookies automáticamente en cada petición
+axios.defaults.withCredentials = true;
+
+// Interceptor para detectar si la sesión expira (Error 401 o 403)
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      // Si el token expiró o es inválido, limpiamos todo y redirigimos al login
+      localStorage.removeItem('usuario');
+      window.location.reload(); // Recarga la página para resetear el estado de React
+    }
+    return Promise.reject(error);
+  }
+);
+
 const apartados = {
   estados: 'Estados',
   municipios: 'Municipios',
@@ -31,9 +50,10 @@ export default function App() {
   const [form, setForm] = useState({});
   const [editId, setEditId] = useState(null);
 
+  // Al montar el componente, verificamos si hay datos de usuario guardados
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
+    const usuario = localStorage.getItem('usuario');
+    if (usuario) {
       setIsAuthenticated(true);
     }
   }, []);
@@ -65,19 +85,18 @@ export default function App() {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Enviamos el login. El backend responderá guardando la cookie en el navegador
       const respuesta = await axios.post(`${API_URL}/login`, loginForm);
       
-      if (respuesta.data.token) {
-        localStorage.setItem('token', respuesta.data.token);
-      } else {
-        localStorage.setItem('token', 'sesion_iniciada_correctamente'); 
+      if (respuesta.data.usuario) {
+        localStorage.setItem('usuario', JSON.stringify(respuesta.data.usuario));
       }
       
       setIsAuthenticated(true);
     } catch (error) {
-
+      // Fallback local para desarrollo si falla la conexión (puedes mantenerlo o quitarlo)
       if (loginForm.username === 'admin' && loginForm.password === '1234') {
-        localStorage.setItem('token', 'token_local_temporal');
+        localStorage.setItem('usuario', JSON.stringify({ nombre: 'Admin Temporal' }));
         setIsAuthenticated(true);
       } else {
         alert(`Error al iniciar sesión: ${error.response?.data?.error || 'Credenciales incorrectas'}`);
@@ -85,10 +104,17 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setIsAuthenticated(false);
-    setLoginForm({ username: '', password: '' });
+  // Logout modificado para destruir la cookie en el servidor
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${API_URL}/logout`); // Le pide al backend que borre la cookie
+    } catch (error) {
+      console.error("Error al cerrar sesión en el servidor:", error);
+    } finally {
+      localStorage.removeItem('usuario');
+      setIsAuthenticated(false);
+      setLoginForm({ username: '', password: '' });
+    }
   };
 
   const handleChange = (e) => {
@@ -399,12 +425,15 @@ export default function App() {
   );
 }
 
+// ==========================================
+// 🎨 ESTILOS (Siguen exactamente igual)
+// ==========================================
 const loginContainerStyle = {
   display: 'flex',
   justifyContent: 'center',
   alignItems: 'center',
   minHeight: '100vh',
-  backgroundColor: '#0f172a', // Fondo oscuro a juego con el panel lateral
+  backgroundColor: '#0f172a',
   fontFamily: 'Segoe UI, sans-serif',
   padding: '20px',
   boxSizing: 'border-box'
@@ -430,7 +459,7 @@ const labelStyle = {
 
 const btnLoginSubmitStyle = {
   width: '100%',
-  backgroundColor: '#3b82f6', // Azul brillante institucional
+  backgroundColor: '#3b82f6',
   color: '#ffffff',
   padding: '12px',
   border: 'none',
@@ -446,7 +475,7 @@ const btnLogoutStyle = {
   display: 'block',
   width: '100%',
   padding: '12px 15px',
-  backgroundColor: '#ef4444', // Rojo
+  backgroundColor: '#ef4444',
   color: '#ffffff',
   border: 'none',
   borderRadius: '6px',
