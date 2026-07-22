@@ -9,7 +9,6 @@ axios.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      // Si el token expiró o es inválido, limpiamos todo y redirigimos al login
       localStorage.removeItem('usuario');
       window.location.reload(); // Recarga la página para resetear el estado de React
     }
